@@ -58,19 +58,6 @@ export async function initAgent(persona: PersonaData): Promise<InitAgentResponse
   return response.json();
 }
 
-export interface DiscoveredTopic {
-  id: string;
-  agentId: string;
-  title: string;
-  summary: string;
-  source: {
-    name: string;
-    url: string;
-  };
-  publishedAt: string;
-  discoveredAt: string;
-}
-
 export interface DiscoverResponse {
   discovered: number;
 }
@@ -124,4 +111,514 @@ export async function fetchTopics(agentId: string): Promise<TopicsResponse> {
 
   return response.json();
 }
+
+export interface DecisionScores {
+  relevance: number;
+  personaAlignment: number;
+  timeliness: number;
+  importance: number;
+  novelty: number;
+  sourceQuality: number;
+  overall: number;
+}
+
+export interface EditorialDecision {
+  id: string;
+  topicId: string;
+  decision: 'ACCEPT' | 'REJECT';
+  scores: DecisionScores;
+  reason: string;
+  evaluatedAt: string;
+}
+
+export interface DiscoveredTopic {
+  id: string;
+  agentId: string;
+  title: string;
+  summary: string;
+  source: {
+    name: string;
+    url: string;
+  };
+  publishedAt: string;
+  discoveredAt: string;
+  decision?: EditorialDecision;
+}
+
+export interface AgentPersona {
+  name: string;
+  role: string;
+  domain: string;
+  description: string;
+  interests: string[];
+  expertise: string[];
+  tone: string[];
+  editorialPrinciples: string[];
+}
+
+export interface PersonaResponse {
+  persona: AgentPersona;
+}
+
+/**
+ * Retrieves the AI agent's persona.
+ * Calls GET /api/agent/persona?agentId=...
+ */
+export async function getPersona(agentId: string): Promise<PersonaResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/persona?agentId=${encodeURIComponent(agentId)}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch persona: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Updates the AI agent's persona.
+ * Calls PATCH /api/agent/persona
+ */
+export async function updatePersona(
+  agentId: string,
+  persona: Partial<AgentPersona>
+): Promise<PersonaResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/persona`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({
+      agentId,
+      persona,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to update persona: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export interface MemoryItem {
+  id: string;
+  type: 'DISCOVERED_TOPIC' | 'EVALUATED_TOPIC' | 'ACCEPTED_TOPIC' | 'REJECTED_TOPIC' | 'PUBLISHED_POST';
+  topicId: string;
+  title: string;
+  decision?: 'ACCEPT' | 'REJECT';
+  score?: number;
+  createdAt: string;
+}
+
+export interface MemoryListResponse {
+  memories: MemoryItem[];
+}
+
+export interface MemoryCheckResponse {
+  memory: {
+    isKnown: boolean;
+    matchType?: 'NORMALIZED_TITLE';
+    matchedMemoryId?: string;
+  };
+}
+
+export interface MemorySummary {
+  totalMemories: number;
+  topicsDiscovered: number;
+  topicsEvaluated: number;
+  acceptedTopics: number;
+  rejectedTopics: number;
+  publishedPosts: number;
+}
+
+export interface MemorySummaryResponse {
+  summary: MemorySummary;
+}
+
+/**
+ * Retrieves the AI agent's memories.
+ * Calls GET /api/agent/memory?agentId=...
+ */
+export async function getMemory(agentId: string): Promise<MemoryListResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/memory?agentId=${encodeURIComponent(agentId)}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch memory: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Checks if a topic has been encountered before.
+ * Calls POST /api/agent/memory/check
+ */
+export async function checkTopicMemory(
+  agentId: string,
+  topicId: string
+): Promise<MemoryCheckResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/memory/check`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({
+      agentId,
+      topicId,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to check topic memory: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Retrieves the AI agent's memory summary stats.
+ * Calls GET /api/agent/memory/summary?agentId=...
+ */
+export async function getMemorySummary(agentId: string): Promise<MemorySummaryResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/memory/summary?agentId=${encodeURIComponent(agentId)}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch memory summary: status ${response.status}`;
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+export interface PostItem {
+  id: string;
+  agentId: string;
+  topicId: string;
+  decisionId: string;
+  status: 'DRAFT';
+  text: string;
+  createdAt: string;
+}
+
+export interface PostResponse {
+  post: PostItem;
+}
+
+export interface PostsResponse {
+  posts: PostItem[];
+}
+
+/**
+ * Request content generation for an accepted topic.
+ */
+export async function generateContent(agentId: string, topicId: string): Promise<PostResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/content/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({ agentId, topicId }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to generate content: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Request content regeneration.
+ */
+export async function regenerateContent(agentId: string, topicId: string): Promise<PostResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/content/regenerate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({ agentId, topicId }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to regenerate content: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch all generated posts.
+ */
+export async function getGeneratedContent(agentId: string): Promise<PostsResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/content?agentId=${encodeURIComponent(agentId)}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch generated content: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch single generated draft.
+ */
+export async function getContent(postId: string, agentId: string): Promise<PostResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/content/${encodeURIComponent(postId)}?agentId=${encodeURIComponent(agentId)}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch single content: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export interface PublishedPost {
+  id: string;
+  createdAt: string;
+  text: string;
+  rationale: string;
+  sources: string[];
+}
+
+export interface FeedResponse {
+  posts: PublishedPost[];
+}
+
+export interface AgentStatusInfo {
+  id: string;
+  status: 'RUNNING' | 'INITIALIZED' | 'PAUSED' | 'STOPPED' | 'ERROR';
+  lastCycleAt: string;
+  lastPublishedAt: string;
+  nextCycleAt: string;
+}
+
+export interface AgentStatusResponse {
+  agent: AgentStatusInfo;
+}
+
+/**
+ * Fetch autonomous agent cycle details and status.
+ */
+export async function getAgentStatus(agentId: string): Promise<AgentStatusResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/status?agentId=${encodeURIComponent(agentId)}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch agent status: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch published posts for the live feed.
+ */
+export async function getFeed(agentId: string): Promise<FeedResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/feed?agentId=${encodeURIComponent(agentId)}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch feed: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export interface ActivityEvent {
+  id: string;
+  agentId: string;
+  type: string;
+  details: string;
+  createdAt: string;
+}
+
+export interface ActivityListResponse {
+  activity: ActivityEvent[];
+}
+
+export interface ActivitySummary {
+  cycles: number;
+  topicsDiscovered: number;
+  topicsAccepted: number;
+  topicsRejected: number;
+  contentGenerated: number;
+  postsPublished: number;
+  failures: number;
+}
+
+export interface ActivitySummaryResponse {
+  summary: ActivitySummary;
+}
+
+export interface LatestActivityResponse {
+  latest: ActivityEvent | null;
+}
+
+export interface PostExplanation {
+  post: PublishedPost;
+  topic: DiscoveredTopic;
+  decision: any;
+  memory: {
+    isKnown: boolean;
+    matchType?: string;
+  };
+}
+
+export interface PostExplanationResponse {
+  explanation: PostExplanation;
+}
+
+/**
+ * Fetch agent activity logs.
+ */
+export async function getAgentActivity(agentId: string, limit: number = 50): Promise<ActivityListResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/activity?agentId=${encodeURIComponent(agentId)}&limit=${limit}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch activity list: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch activity summary counters.
+ */
+export async function getActivitySummary(agentId: string): Promise<ActivitySummaryResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/activity/summary?agentId=${encodeURIComponent(agentId)}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch activity summary: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch latest activity event.
+ */
+export async function getLatestActivity(agentId: string): Promise<LatestActivityResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/activity/latest?agentId=${encodeURIComponent(agentId)}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch latest activity: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch post select explanation and metadata.
+ */
+export async function getPostExplanation(agentId: string, postId: string): Promise<PostExplanationResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/posts/${encodeURIComponent(postId)}/explanation?agentId=${encodeURIComponent(agentId)}`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to fetch post explanation: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+
 
