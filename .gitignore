@@ -5,17 +5,17 @@ jspm_packages/
 .pnp.js
 
 # Testing
-/coverage
-/.nyc_output
+coverage/
+.nyc_output/
 
 # Production / Build
-/build
-/dist
-/out
-/.next
-/.nuxt
-/tmp
-/temp
+build/
+dist/
+out/
+.next/
+.nuxt/
+tmp/
+temp/
 
 # Environment and Secrets
 .env
