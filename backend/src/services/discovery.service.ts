@@ -217,6 +217,23 @@ export class DiscoveryService {
     // Save batch to repository
     if (topicsToSave.length > 0) {
       await this.topicRepository.saveAll(topicsToSave);
+      
+      // Auto-log to memory service and activity service
+      try {
+        const { memoryService } = require('../controllers/memory.controller');
+        const { globalActivityService } = require('./activity.service');
+        for (const topic of topicsToSave) {
+          await memoryService.recordTopicDiscovery(agentId, topic);
+          await globalActivityService.recordEvent(
+            agentId,
+            'TOPIC_DISCOVERED',
+            `Discovered a new AI or tech topic: "${topic.title}".`,
+            topic.id
+          );
+        }
+      } catch (err: any) {
+        console.error('[Discovery] Failed to record topic memory/activity:', err.message);
+      }
     }
 
     return topicsToSave.length;

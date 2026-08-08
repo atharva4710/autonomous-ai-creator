@@ -37,4 +37,19 @@ if (config.nodeEnv !== 'test') {
   });
 }
 
+// Graceful shutdown handler
+const shutdown = async () => {
+  console.log('\n[Server] Shutting down gracefully...');
+  try {
+    const { globalAutonomousService } = require('./services/autonomous/autonomous.service');
+    await globalAutonomousService.stopAll();
+  } catch (err: any) {
+    console.error('Error during shutdown:', err.message);
+  }
+  process.exit(0);
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
 export default app;

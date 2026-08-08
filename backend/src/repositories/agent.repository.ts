@@ -28,3 +28,5 @@ export class InMemoryAgentRepository implements IAgentRepository {
     );
   }
 }
+
+export const globalAgentRepository = new InMemoryAgentRepository();

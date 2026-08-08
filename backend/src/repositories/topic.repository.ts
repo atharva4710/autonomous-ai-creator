@@ -4,6 +4,7 @@ export interface ITopicRepository {
   save(topic: Topic): Promise<Topic>;
   saveAll(topics: Topic[]): Promise<Topic[]>;
   findByAgentId(agentId: string): Promise<Topic[]>;
+  findById(id: string): Promise<Topic | null>;
 }
 
 export class InMemoryTopicRepository implements ITopicRepository {
@@ -29,4 +30,12 @@ export class InMemoryTopicRepository implements ITopicRepository {
       .filter((t) => t.agentId === agentId)
       .map((t) => JSON.parse(JSON.stringify(t)));
   }
+
+  async findById(id: string): Promise<Topic | null> {
+    const topic = this.topics.get(id);
+    if (!topic) return null;
+    return JSON.parse(JSON.stringify(topic));
+  }
 }
+
+export const globalTopicRepository = new InMemoryTopicRepository();

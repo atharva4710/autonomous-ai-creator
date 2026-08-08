@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { AgentService } from '../services/agent.service';
-import { InMemoryAgentRepository } from '../repositories/agent.repository';
+import { globalAgentRepository } from '../repositories/agent.repository';
 
 // Instantiate a single shared repository and service instance for this run
-const agentRepository = new InMemoryAgentRepository();
+export const agentRepository = globalAgentRepository;
 export const agentService = new AgentService(agentRepository);
 
 /**
@@ -29,7 +29,7 @@ export const initAgent = async (
       return;
     }
 
-    const { name, domain } = persona;
+    const { name, domain, ...rest } = persona;
 
     // Validate values and reject if empty/whitespace-only/missing
     if (
@@ -47,12 +47,43 @@ export const initAgent = async (
       return;
     }
 
-    // Call service to initialize agent state
-    const agent = await agentService.initializeAgent(name, domain);
+    try {
+      // Call service to initialize agent state
+      const agent = await agentService.initializeAgent(name, domain, rest);
 
-    res.status(201).json({
-      agentId: agent.agentId,
-    });
+      // Record AGENT_INITIALIZED event
+      try {
+        const { globalActivityService } = require('../services/activity.service');
+        await globalActivityService.recordEvent(
+          agent.agentId,
+          'AGENT_INITIALIZED',
+          `Agent persona "${agent.persona.name}" initialized successfully for domain "${agent.persona.domain}".`
+        );
+      } catch (err: any) {
+        console.error('Failed to log agent initialization activity:', err.message);
+      }
+
+      // Start autonomous loop in the background without blocking the HTTP response
+      if (process.env.NODE_ENV !== 'test' || process.env.AUTONOMOUS_ENABLED === 'true') {
+        try {
+          const { globalAutonomousService } = require('../services/autonomous/autonomous.service');
+          globalAutonomousService.startAgentLoop(agent.agentId);
+        } catch (err: any) {
+          console.error('Failed to start autonomous loop:', err.message);
+        }
+      }
+
+      res.status(201).json({
+        agentId: agent.agentId,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        error: {
+          message: error.message || 'Invalid persona data',
+          status: 400,
+        },
+      });
+    }
   } catch (error) {
     next(error);
   }

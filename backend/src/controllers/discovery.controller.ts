@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { DiscoveryService } from '../services/discovery.service';
-import { InMemoryTopicRepository } from '../repositories/topic.repository';
+import { globalTopicRepository } from '../repositories/topic.repository';
 import { agentService } from './agent.controller';
 
 // Shared repository and service instance for this run
-export const topicRepository = new InMemoryTopicRepository();
+export const topicRepository = globalTopicRepository;
 export const discoveryService = new DiscoveryService(topicRepository, agentService);
 
 /**
