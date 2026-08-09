@@ -298,9 +298,9 @@ export class AutonomousService {
       // Sort eligible candidates descending by overall score
       eligibleCandidates.sort((a, b) => b.decision.scores.overall - a.decision.scores.overall);
 
-      // Iterate down the eligible candidate list until a post is successfully generated & published
-      for (let i = 0; i < eligibleCandidates.length; i++) {
-        const candidate = eligibleCandidates[i];
+      // Generate only the top eligible candidate per cycle to avoid unnecessary LLM calls and respect provider rate limits.
+      if (eligibleCandidates.length > 0) {
+        const candidate = eligibleCandidates[0];
         const selectedTopic = candidate.topic;
 
         // Double check against published posts repository to prevent duplicate publishing
@@ -312,65 +312,61 @@ export class AutonomousService {
             normalizeText(p.text).includes(normalizeText(selectedTopic.title).slice(0, 30))
         );
 
-        if (alreadyPublished) {
-          continue;
-        }
+        if (!alreadyPublished) {
+          // Build top rejected alternatives comparison set
+          const rejectedAlternatives = cycleEvaluations
+            .filter((item) => item.topic.id !== selectedTopic.id)
+            .slice(0, 5)
+            .map((item) => ({
+              topicId: item.topic.id,
+              title: item.topic.title,
+              score: item.decision.scores.overall,
+              rejectionReason: item.decision.reason,
+            }));
 
-        // Build top rejected alternatives comparison set
-        const rejectedAlternatives = cycleEvaluations
-          .filter((item) => item.topic.id !== selectedTopic.id)
-          .slice(0, 5)
-          .map((item) => ({
-            topicId: item.topic.id,
-            title: item.topic.title,
-            score: item.decision.scores.overall,
-            rejectionReason: item.decision.reason,
-          }));
+          candidate.decision.selectionRank = 1;
+          candidate.decision.comparativeAlternatives = rejectedAlternatives;
+          await globalEditorialRepository.save(candidate.decision);
 
-        candidate.decision.selectionRank = i + 1;
-        candidate.decision.comparativeAlternatives = rejectedAlternatives;
-        await globalEditorialRepository.save(candidate.decision);
-
-        // 3. Generate Content
-        this.agentStages.set(agentId, 'CONTENT_GENERATION');
-        try {
+          // 3. Generate Content
+          this.agentStages.set(agentId, 'CONTENT_GENERATION');
           try {
-            await globalContentGenerationService.generateContent(
-              agentId,
-              selectedTopic.id
+            try {
+              await globalContentGenerationService.generateContent(
+                agentId,
+                selectedTopic.id
+              );
+            } catch (genErr: any) {
+              await globalActivityService.recordEvent(
+                agentId,
+                'AI_ERROR',
+                `Content generation failed for "${selectedTopic.title}": ${genErr.message}`,
+                selectedTopic.id
+              );
+              throw genErr;
+            }
+
+            // 4. Publish
+            this.agentStages.set(agentId, 'PUBLISHING');
+            await globalPublishingService.publishPost(agentId, selectedTopic.id);
+
+            agent.lastPublishedAt = new Date().toISOString();
+            await globalAgentRepository.save(agent);
+
+            postPublished = true;
+          } catch (err: any) {
+            cycleErrors.push(err);
+            console.error(
+              `[Autonomous] Content generation/publishing failed for topic ${selectedTopic.id}:`,
+              err.message
             );
-          } catch (genErr: any) {
             await globalActivityService.recordEvent(
               agentId,
-              'AI_ERROR',
-              `Content generation failed for "${selectedTopic.title}": ${genErr.message}`,
+              'CYCLE_FAILED',
+              `Attempt failed for topic "${selectedTopic.title}": ${err.message}`,
               selectedTopic.id
             );
-            throw genErr;
           }
-
-          // 4. Publish
-          this.agentStages.set(agentId, 'PUBLISHING');
-          await globalPublishingService.publishPost(agentId, selectedTopic.id);
-
-          agent.lastPublishedAt = new Date().toISOString();
-          await globalAgentRepository.save(agent);
-
-          postPublished = true;
-          break; // Successfully published post for this cycle
-        } catch (err: any) {
-          cycleErrors.push(err);
-          console.error(
-            `[Autonomous] Content generation/publishing failed for topic ${selectedTopic.id}:`,
-            err.message
-          );
-          await globalActivityService.recordEvent(
-            agentId,
-            'CYCLE_FAILED',
-            `Attempt failed for topic "${selectedTopic.title}": ${err.message}`,
-            selectedTopic.id
-          );
-          // Continue down the list to next eligible candidate
         }
       }
 

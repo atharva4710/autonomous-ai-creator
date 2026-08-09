@@ -160,7 +160,7 @@ export class ContentGenerationService {
       const provider = this.aiProvider || globalAIProvider;
       result = await retry(
         () => withTimeout(() => provider.generateText(input), timeoutMs, 'AI Provider'),
-        { maxAttempts: 2, delayMs: 200 }
+        { maxAttempts: 1, delayMs: 0 }
       );
     } catch (err: any) {
       throw new ContentGenerationError(`AI provider failed after retries: ${err.message}`, err.retryable ?? true);

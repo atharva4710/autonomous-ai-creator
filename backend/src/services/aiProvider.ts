@@ -97,7 +97,7 @@ WRITING & EDITORIAL MANDATES:
 PLATFORM FORMATTING SPECIFICATIONS (RETURN VALID JSON ONLY):
 Produce THREE distinct, non-overlapping content formats tailored specifically for their respective platforms:
 
-1. "blog": Short-form technical editorial article (500–800 words).
+1. "blog": Short-form technical editorial article (300–500 words).
    - "title": Clean, compelling headline. DO NOT prepend "[Analysis]" or clickbait prefixes.
    - "text": Full Markdown article structured with short paragraphs and clear section headings:
      - 2 short opening paragraphs introducing the event and immediate relevance.
