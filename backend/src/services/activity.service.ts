@@ -124,19 +124,40 @@ export class ActivityService {
     const isKnown = memoryEvents.length > 0 ? !!memoryEvents[0].metadata?.isKnown : false;
 
     return {
+      post: {
+        id: post.id,
+        createdAt: post.createdAt,
+        text: post.text,
+        rationale: post.rationale || 'Selected based on domain principles.',
+        sources: post.sources || (topic.source?.url ? [topic.source.url] : []),
+        selectedFormat: post.selectedFormat,
+        content: post.content,
+      },
+      rationale: post.rationale || 'Selected based on domain principles.',
+      sources: post.sources || (topic.source?.url ? [topic.source.url] : []),
       topic: {
+        id: topic.id,
+        agentId: topic.agentId,
         title: topic.title,
+        summary: topic.summary,
+        source: topic.source,
+        publishedAt: topic.publishedAt,
+        discoveredAt: topic.discoveredAt,
       },
-      decision: {
-        decision: decision ? decision.decision : 'ACCEPT',
-        score: decision ? decision.scores.overall : 70,
-        reason: decision ? decision.reason : 'Selected based on relevance scoring.',
-      },
+      decision: decision ? {
+        id: decision.id,
+        topicId: decision.topicId,
+        decision: decision.decision,
+        score: decision.scores?.overall ?? 0,
+        scores: decision.scores,
+        reason: decision.reason,
+        evaluatedAt: decision.evaluatedAt,
+        selectionRank: decision.selectionRank,
+        comparativeAlternatives: decision.comparativeAlternatives,
+      } : null,
       memory: {
         isKnown,
       },
-      rationale: post.rationale || 'Selected based on domain principles.',
-      sources: post.sources || [topic.source.url],
     };
   }
 }

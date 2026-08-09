@@ -64,7 +64,7 @@ export const initAgent = async (
       }
 
       // Start autonomous loop in the background without blocking the HTTP response
-      if (process.env.NODE_ENV !== 'test' || process.env.AUTONOMOUS_ENABLED === 'true') {
+      if (!process.env.JEST_WORKER_ID || process.env.AUTONOMOUS_ENABLED === 'true') {
         try {
           const { globalAutonomousService } = require('../services/autonomous/autonomous.service');
           globalAutonomousService.startAgentLoop(agent.agentId);

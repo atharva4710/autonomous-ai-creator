@@ -91,8 +91,20 @@ export const getTopics = async (
 
     const rawTopics = await topicRepository.findByAgentId(trimmedAgentId);
 
+    // Enrich topics with editorial decision if present
+    const { globalEditorialRepository } = require('../repositories/editorial.repository');
+    const enrichedTopics = await Promise.all(
+      rawTopics.map(async (t) => {
+        const decision = await globalEditorialRepository.findByTopicId(t.id);
+        return {
+          ...t,
+          decision: decision || undefined,
+        };
+      })
+    );
+
     // Sort by discoveredAt descending (newest first)
-    const sortedTopics = rawTopics.sort(
+    const sortedTopics = enrichedTopics.sort(
       (a, b) => Date.parse(b.discoveredAt) - Date.parse(a.discoveredAt)
     );
 

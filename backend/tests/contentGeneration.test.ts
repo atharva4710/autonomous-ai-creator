@@ -13,6 +13,7 @@ describe('Content Generation Engine Endpoints & Integration', () => {
   let originalFetch: typeof global.fetch;
 
   beforeAll(async () => {
+    process.env.AUTONOMOUS_ENABLED = 'false';
     originalFetch = global.fetch;
 
     // Mock fetch for Stage 2 checks
@@ -195,7 +196,7 @@ describe('Content Generation Engine Endpoints & Integration', () => {
     });
 
     it('7. should fail safely with HTTP 400 when AI provider throws an error', async () => {
-      const spy = jest.spyOn(globalAIProvider, 'generateText').mockImplementationOnce(() => {
+      const spy = jest.spyOn(globalAIProvider, 'generateText').mockImplementation(() => {
         throw new Error('AI Provider crash');
       });
 
@@ -255,7 +256,7 @@ describe('Content Generation Engine Endpoints & Integration', () => {
     it('10. should validate maximum content length bounds (exceeding 1300 chars)', async () => {
       const spy = jest.spyOn(globalAIProvider, 'generateText').mockImplementationOnce(() =>
         Promise.resolve({
-          text: 'a'.repeat(1400),
+          text: 'a'.repeat(4500),
           angle: 'Long post',
           keyPoints: [],
         })
@@ -455,6 +456,64 @@ describe('Content Generation Engine Endpoints & Integration', () => {
       const res = await request(app).get('/health');
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ status: 'ok' });
+    });
+  });
+
+  describe('Phase 6 — Professional AI Content Generation Quality Checks', () => {
+    it('26. Sample Quality Test: multi-format content meets platform differentiation & hashtag requirements', async () => {
+      const mockInput = {
+        persona: {
+          name: 'Ada',
+          domain: 'AI Security',
+          role: 'AI Security Researcher',
+          description: 'AI Security Researcher',
+          interests: ['prompt injection'],
+          expertise: ['LLM safety'],
+          tone: ['analytical'],
+          editorialPrinciples: ['Evidence over hype'],
+        },
+        topic: {
+          id: 'topic-sample-qual',
+          agentId: 'agent-qual',
+          title: 'Researchers discover a new prompt injection technique affecting AI agents',
+          summary: 'A new zero-day prompt injection vulnerability allows unauthorized instruction execution in AI agent frameworks.',
+          source: { name: 'ArXiv AI Security', url: 'https://arxiv.org/abs/2608.1234' },
+          publishedAt: new Date().toISOString(),
+          discoveredAt: new Date().toISOString(),
+        },
+        editorialDecision: {
+          decision: 'ACCEPT' as const,
+          overallScore: 92,
+          reason: 'High technical relevance and timeliness.',
+        },
+        memoryContext: {
+          isKnown: false,
+        },
+      };
+
+      const provider = new (require('../src/services/aiProvider').MockAIProvider)();
+      const generated = await provider.generateText(mockInput);
+
+      expect(generated.content).toBeDefined();
+      const { blog, linkedin, x } = generated.content;
+
+      // 1. Blog assertions
+      expect(blog.title).toContain('Researchers discover a new prompt injection technique');
+      expect(blog.text).toContain('## Overview');
+      expect(blog.text).toContain('## Key Takeaways');
+
+      // 2. LinkedIn assertions
+      expect(linkedin.text).toContain('Key takeaways:');
+      expect(linkedin.text).toContain('#AISecurity');
+      expect(linkedin.text.length).toBeGreaterThan(50);
+
+      // 3. X assertions
+      expect(x.text.length).toBeLessThanOrEqual(280);
+      expect(x.text).toContain('#AISecurity');
+
+      // 4. Platform differentiation
+      expect(blog.text).not.toEqual(linkedin.text);
+      expect(linkedin.text).not.toEqual(x.text);
     });
   });
 });

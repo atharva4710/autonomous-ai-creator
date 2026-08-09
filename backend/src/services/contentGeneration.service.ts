@@ -7,11 +7,15 @@ import { globalTopicRepository } from '../repositories/topic.repository';
 import { globalEditorialRepository } from '../repositories/editorial.repository';
 import { IAIProvider, globalAIProvider, GenerationInput } from './aiProvider';
 import { globalMemoryRepository } from '../repositories/memory.repository';
+import { ContentGenerationError } from '../utils/errors';
+import { retry, withTimeout } from '../utils/retry';
+import { globalActivityService } from './activity.service';
+import { memoryService } from '../controllers/memory.controller';
 
 export class ContentGenerationService {
   private postRepository: IPostRepository;
   private aiProvider: IAIProvider;
-  private MAX_POST_LENGTH = 1300;
+  private MAX_POST_LENGTH = 4000;
   private MAX_REGENERATIONS = 3;
 
   constructor(postRepository: IPostRepository, aiProvider: IAIProvider) {
@@ -22,7 +26,7 @@ export class ContentGenerationService {
   /**
    * Helper validator to ensure generated text meets target bounds.
    */
-  private validateContent(text: string): void {
+  private validateContent(text: string, content?: any): void {
     if (!text || typeof text !== 'string' || !text.trim()) {
       throw new Error('Generated content is empty.');
     }
@@ -40,6 +44,12 @@ export class ContentGenerationService {
       'here is your post',
       'system prompt',
       'insert role',
+      'rapidly evolving landscape',
+      'ever-changing world',
+      'here is a linkedin post',
+      'here is the blog',
+      'lorem ipsum',
+      'todo:',
     ];
 
     for (const marker of markers) {
@@ -47,6 +57,22 @@ export class ContentGenerationService {
         throw new Error(
           `Generated content contains unexpected commentary or placeholder marker: "${marker}"`
         );
+      }
+    }
+
+    if (content) {
+      if (content.blog?.text && content.linkedin?.text) {
+        if (content.blog.text.trim() === content.linkedin.text.trim()) {
+          throw new Error('Generated Blog and LinkedIn content cannot be identical.');
+        }
+      }
+      if (content.linkedin?.text && content.x?.text) {
+        if (content.linkedin.text.trim() === content.x.text.trim()) {
+          throw new Error('Generated LinkedIn and X content cannot be identical.');
+        }
+      }
+      if (content.x?.text && content.x.text.length > 280) {
+        throw new Error('X post exceeds 280 characters limit.');
       }
     }
   }
@@ -92,7 +118,6 @@ export class ContentGenerationService {
     let isKnown = false;
     let matchType: string | undefined;
     try {
-      const { memoryService } = require('../controllers/memory.controller');
       const match = await memoryService.checkTopicHistory(
         agentId,
         topicId,
@@ -117,11 +142,36 @@ export class ContentGenerationService {
       },
     };
 
-    // 7. Call AI Provider
-    const result = await this.aiProvider.generateText(input);
+    // 7. Record start activity event
+    try {
+      const providerName = process.env.GROQ_API_KEY ? 'GroqAIProvider' : 'MockAIProvider';
+      await globalActivityService.recordEvent(
+        agentId,
+        'CONTENT_GENERATED',
+        `Started multi-format content generation for topic "${topic.title}" using ${providerName}.`,
+        topicId
+      );
+    } catch (_) {}
+
+    // 8. Call AI Provider with Retry and Timeout
+    let result: any;
+    try {
+      const timeoutMs = process.env.GROQ_API_KEY ? 15000 : 5000;
+      const provider = this.aiProvider || globalAIProvider;
+      result = await retry(
+        () => withTimeout(() => provider.generateText(input), timeoutMs, 'AI Provider'),
+        { maxAttempts: 2, delayMs: 200 }
+      );
+    } catch (err: any) {
+      throw new ContentGenerationError(`AI provider failed after retries: ${err.message}`, err.retryable ?? true);
+    }
+
+    if (!result || typeof result.text !== 'string') {
+      throw new ContentGenerationError('AI Provider returned malformed or empty text response.', true);
+    }
 
     // 8. Validate content
-    this.validateContent(result.text);
+    this.validateContent(result.text, result.content);
 
     // 9. Construct PostDraft
     const draftId = `post-${crypto.randomBytes(4).toString('hex')}`;
@@ -137,13 +187,14 @@ export class ContentGenerationService {
       sources: [topic.source.url],
       regenerationsCount: 0,
       createdAt: new Date().toISOString(),
+      content: result.content,
+      selectedFormat: 'blog',
     };
 
     const savedDraft = await this.postRepository.save(newDraft);
 
     // Record activity events
     try {
-      const { globalActivityService } = require('./activity.service');
       await globalActivityService.recordEvent(
         agentId,
         'CONTENT_GENERATED',
@@ -225,7 +276,6 @@ export class ContentGenerationService {
     let isKnown = false;
     let matchType: string | undefined;
     try {
-      const { memoryService } = require('../controllers/memory.controller');
       const match = await memoryService.checkTopicHistory(
         agentId,
         topicId,
@@ -250,16 +300,30 @@ export class ContentGenerationService {
       },
     };
 
-    // 8. Call AI Provider for fresh angle
-    const result = await this.aiProvider.generateText(input);
+    // 8. Call AI Provider for fresh angle with Retry and Timeout
+    let result: any;
+    try {
+      result = await retry(
+        () => withTimeout(() => this.aiProvider.generateText(input), 5000, 'AI Provider'),
+        { maxAttempts: 2, delayMs: 200 }
+      );
+    } catch (err: any) {
+      throw new ContentGenerationError(`AI provider failed after retries: ${err.message}`, err.retryable ?? true);
+    }
+
+    if (!result || typeof result.text !== 'string') {
+      throw new ContentGenerationError('AI Provider returned malformed or empty text response.', true);
+    }
 
     // 9. Validate text
-    this.validateContent(result.text);
+    this.validateContent(result.text, result.content);
 
     // 10. Update draft properties
     existing.text = result.text;
     existing.angle = result.angle;
     existing.keyPoints = result.keyPoints;
+    existing.content = result.content;
+    existing.selectedFormat = 'blog';
     existing.regenerationsCount += 1;
     existing.createdAt = new Date().toISOString();
 
@@ -267,7 +331,6 @@ export class ContentGenerationService {
 
     // Record activity events
     try {
-      const { globalActivityService } = require('./activity.service');
       await globalActivityService.recordEvent(
         agentId,
         'CONTENT_GENERATED',

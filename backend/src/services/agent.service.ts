@@ -36,6 +36,8 @@ export class AgentService {
     // Run validator first
     validatePersona(candidatePersona);
 
+
+
     // Apply defaults to optional fields if not explicitly specified
     const isAiSecurity = trimmedDomain.toLowerCase() === 'ai security';
 
@@ -80,6 +82,18 @@ export class AgentService {
       editorialPrinciples,
     };
 
+    // Prevent duplicate agent loops for identical configurations
+    const existingAgents = await this.agentRepository.findAll();
+    const duplicate = existingAgents.find(
+      (a) =>
+        a.persona.name.toLowerCase() === trimmedName.toLowerCase() &&
+        a.persona.domain.toLowerCase() === trimmedDomain.toLowerCase() &&
+        JSON.stringify(a.persona) === JSON.stringify(fullPersona)
+    );
+    if (duplicate) {
+      return duplicate;
+    }
+
     // Generate unique 8 character hexadecimal random string -> agent-xxxxxxxx
     const randomHex = crypto.randomBytes(4).toString('hex');
     const agentId = `agent-${randomHex}`;
@@ -87,7 +101,7 @@ export class AgentService {
     const newAgent: AgentState = {
       agentId,
       persona: fullPersona,
-      status: 'initialized',
+      status: 'RUNNING',
       createdAt: new Date().toISOString(), // UTC ISO 8601
     };
 

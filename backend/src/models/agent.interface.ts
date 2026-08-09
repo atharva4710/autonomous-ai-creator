@@ -12,9 +12,10 @@ export interface Persona {
 export interface AgentState {
   agentId: string;
   persona: Persona;
-  status: 'INITIALIZED' | 'RUNNING' | 'PAUSED' | 'STOPPED' | 'ERROR' | 'initialized';
+  status: 'INITIALIZED' | 'RUNNING' | 'PAUSED' | 'STOPPED' | 'ERROR' | 'initialized' | 'DEGRADED' | 'IDLE';
   createdAt: string; // ISO 8601 UTC timestamp
   lastCycleAt?: string;
   lastPublishedAt?: string;
   nextCycleAt?: string;
+  intervalMinutes?: number;
 }

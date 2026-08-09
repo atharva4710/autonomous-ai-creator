@@ -27,11 +27,15 @@ export const errorHandler = (
     }
   }
 
+  const code = (err as any).code || 'INTERNAL_SERVER_ERROR';
+  const retryable = (err as any).retryable !== undefined ? (err as any).retryable : false;
+
   res.status(status).json({
     error: {
+      code,
       message,
+      retryable,
       status,
-      ...(config.nodeEnv !== 'production' && { stack: err.stack }),
     },
   });
 };

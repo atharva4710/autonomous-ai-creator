@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { config } from './config';
+import { config, validateConfig, getSafeDatabaseUrl } from './config';
 import routes from './routes';
 import { notFound } from './middleware/notFound';
 import { errorHandler } from './middleware/errorHandler';
@@ -30,10 +30,29 @@ app.use(errorHandler);
 
 // Only listen if not running in a test environment
 if (config.nodeEnv !== 'test') {
-  app.listen(config.port, () => {
-    console.log(
-      `[Server] Running in ${config.nodeEnv} mode on http://localhost:${config.port}`
-    );
+  try {
+    validateConfig();
+  } catch (cfgErr: any) {
+    console.error('[Server Configuration Error]:', cfgErr.message);
+    process.exit(1);
+  }
+
+  app.listen(config.port, async () => {
+    console.log(`[Server] Running in ${config.nodeEnv} mode on http://localhost:${config.port}`);
+    console.log(`[Server] AI Provider: ${config.aiProvider.toUpperCase()}`);
+    if (config.aiProvider === 'groq') {
+      console.log(`[Server] AI Model: ${config.groqModel}`);
+    }
+    console.log(`[Server] Database URL: ${getSafeDatabaseUrl(config.databaseUrl)}`);
+    console.log(`[Server] Autonomous Cycle Interval: ${config.autonomousCycleIntervalMs}ms`);
+
+    try {
+      const { globalAutonomousService } = require('./services/autonomous/autonomous.service');
+      const restored = await globalAutonomousService.restoreActiveLoops();
+      console.log(`[Server] Autonomous engine initialized. Restored ${restored} active agent loop(s) from persistent storage.`);
+    } catch (err: any) {
+      console.error('[Server] Failed to restore active agent loops on startup:', err.message);
+    }
   });
 }
 

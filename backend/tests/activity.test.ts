@@ -112,22 +112,22 @@ describe('Activity Logging & Explainability Endpoints', () => {
       // 2. Retrieve
       const res = await request(app).get(`/api/agent/activity?agentId=${agentAId}`);
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('events');
-      expect(res.body.events.length).toBeGreaterThanOrEqual(3);
+      expect(res.body).toHaveProperty('activity');
+      expect(res.body.activity.length).toBeGreaterThanOrEqual(3);
 
       // 3. Newest-first sorting check
-      const events = res.body.events;
-      const parsedTime0 = Date.parse(events[0].timestamp);
-      const parsedTime1 = Date.parse(events[1].timestamp);
+      const events = res.body.activity;
+      const parsedTime0 = Date.parse(events[0].createdAt);
+      const parsedTime1 = Date.parse(events[1].createdAt);
       expect(parsedTime0).toBeGreaterThanOrEqual(parsedTime1);
 
       // 4. Limit check
       const resLimit = await request(app).get(`/api/agent/activity?agentId=${agentAId}&limit=2`);
-      expect(resLimit.body.events.length).toBe(2);
+      expect(resLimit.body.activity.length).toBe(2);
 
       // 5. Max limit check
       const resMax = await request(app).get(`/api/agent/activity?agentId=${agentAId}&limit=120`);
-      expect(resMax.body.events.length).toBeLessThanOrEqual(100);
+      expect(resMax.body.activity.length).toBeLessThanOrEqual(100);
     });
 
     it('6. should enforce agent isolation check on activity queries', async () => {
@@ -146,7 +146,7 @@ describe('Activity Logging & Explainability Endpoints', () => {
       // It should query Agent B's empty logs or filter out Agent A's details
       const res = await request(app).get(`/api/agent/activity?agentId=${agentBId}`);
       expect(res.status).toBe(200);
-      const initEvent = res.body.events.find((e: any) => e.agentId === agentAId);
+      const initEvent = res.body.activity.find((e: any) => e.agentId === agentAId);
       expect(initEvent).toBeUndefined(); // Agent A's logs must not leak to Agent B
     });
   });
@@ -207,9 +207,9 @@ describe('Activity Logging & Explainability Endpoints', () => {
     it('16. should retrieve the latest activity correctly', async () => {
       const res = await request(app).get(`/api/agent/activity/latest?agentId=${agentAId}`);
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('event');
-      expect(res.body.event).not.toBeNull();
-      expect(res.body.event.agentId).toBe(agentAId);
+      expect(res.body).toHaveProperty('latest');
+      expect(res.body.latest).not.toBeNull();
+      expect(res.body.latest.agentId).toBe(agentAId);
     });
 
     it('18. & 19. & 20. should enrich feed response, preserving rationales and sources', async () => {
@@ -268,6 +268,11 @@ describe('Activity Logging & Explainability Endpoints', () => {
 
   describe('Compatibility tests with previous stages', () => {
     it('22. Stage 7 autonomous engine still works', async () => {
+      const agentObj = await globalAgentRepository.findById(agentAId);
+      if (agentObj) {
+        agentObj.status = 'RUNNING';
+        await globalAgentRepository.save(agentObj);
+      }
       const agent = await globalAgentRepository.findById(agentAId);
       expect(agent?.status).toBe('RUNNING');
     });

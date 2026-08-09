@@ -3,6 +3,9 @@ import { Topic } from '../models/topic.interface';
 import { AgentState } from '../models/agent.interface';
 import { EditorialDecision } from '../models/editorial.interface';
 import { IEditorialRepository } from '../repositories/editorial.repository';
+import { expandDomainQueries } from '../utils/domainQueryExpander';
+import { globalActivityService } from './activity.service';
+import { memoryService } from '../controllers/memory.controller';
 
 export class EditorialService {
   private editorialRepository: IEditorialRepository;
@@ -34,25 +37,37 @@ export class EditorialService {
 
     const domain = agent.persona.domain.toLowerCase();
     const title = topic.title.toLowerCase();
-    const summary = topic.summary.toLowerCase();
+    const summary = (topic.summary || '').toLowerCase();
     const content = `${title} ${summary}`;
 
     // 1. RELEVANCE (0-100)
-    // Extract keywords from agent's domain and count hits
-    const domainWords = domain.split(/\s+/).filter((w) => w.length > 2);
-    let relevanceHits = 0;
-    for (const word of domainWords) {
-      if (content.includes(word)) {
-        relevanceHits++;
+    const expandedQueries = expandDomainQueries(agent.persona.domain, agent.persona.interests || []);
+
+    let relevance = 15;
+    if (content.includes(domain)) {
+      relevance = 100;
+    } else {
+      let conceptHits = 0;
+      for (const query of expandedQueries) {
+        const lowerQuery = query.toLowerCase();
+        if (lowerQuery.length >= 3 && content.includes(lowerQuery)) {
+          conceptHits++;
+        }
+      }
+      if (conceptHits >= 2) relevance = 95;
+      else if (conceptHits === 1) relevance = 85;
+      else {
+        const domainWords = domain.split(/\s+/).filter((w) => w.length >= 3);
+        let wordHits = 0;
+        for (const w of domainWords) {
+          if (content.includes(w)) wordHits++;
+        }
+        if (domainWords.length > 0 && wordHits === domainWords.length) relevance = 75;
+        else if (wordHits > 0) relevance = 45;
       }
     }
-    let relevance = 10;
-    if (relevanceHits === 1) relevance = 50;
-    else if (relevanceHits === 2) relevance = 85;
-    else if (relevanceHits >= 3) relevance = 100;
 
     // 2. PERSONA ALIGNMENT (0-100)
-    // Check match against persona interests and expertise arrays
     const interests = agent.persona.interests || [];
     const expertise = agent.persona.expertise || [];
     const focusTerms = [...interests, ...expertise].map((t) => t.toLowerCase());
@@ -60,7 +75,7 @@ export class EditorialService {
     let alignmentMatches = 0;
     for (const term of focusTerms) {
       if (content.includes(term)) {
-        alignmentMatches += 2; // High weight for exact phrase match
+        alignmentMatches += 2;
       } else {
         const words = term.split(/\s+/).filter((w) => w.length > 2);
         for (const word of words) {
@@ -87,6 +102,8 @@ export class EditorialService {
         'model',
         'intelligence',
         'research',
+        'robot',
+        'learning',
       ];
       let alignmentHits = 0;
       for (const key of interestKeywords) {
@@ -105,8 +122,7 @@ export class EditorialService {
       }
     }
 
-    // 3. TIMELINESS (0-100)
-    // Check age of topic relative to discovery time
+    // 3. TIMELINESS / FRESHNESS (0-100)
     let timeliness = 50;
     const pubTime = Date.parse(topic.publishedAt);
     const discTime = Date.parse(topic.discoveredAt);
@@ -114,15 +130,13 @@ export class EditorialService {
       const diffMs = Math.abs(discTime - pubTime);
       const diffHours = diffMs / (1000 * 60 * 60);
 
-      if (diffHours < 12) timeliness = 100;
-      else if (diffHours < 24) timeliness = 90;
-      else if (diffHours < 48) timeliness = 75;
-      else if (diffHours < 168) timeliness = 50; // 7 days
-      else timeliness = 30;
+      if (diffHours <= 24) timeliness = 95;
+      else if (diffHours <= 48) timeliness = 80;
+      else if (diffHours <= 168) timeliness = 55; // Within 7 days
+      else timeliness = 20; // Stale (> 7 days)
     }
 
     // 4. IMPORTANCE (0-100)
-    // Look for high-importance tags in text
     const highTriggers = [
       'breakthrough',
       'critical',
@@ -134,8 +148,10 @@ export class EditorialService {
       'hack',
       'research',
       'major',
+      'benchmark',
+      'launch',
     ];
-    const medTriggers = ['update', 'improved', 'new', 'model', 'change'];
+    const medTriggers = ['update', 'improved', 'new', 'model', 'change', 'framework'];
 
     let importance = 50;
     if (highTriggers.some((t) => content.includes(t))) {
@@ -145,17 +161,34 @@ export class EditorialService {
     }
 
     // 5. NOVELTY (0-100)
-    // Look for version specifiers or unique LLM references
-    const versionRegex = /\b\d+\.\d+\b|gpt-|claude|llama|gemini|astra/i;
+    const versionRegex = /\b\d+\.\d+\b|gpt-|claude|llama|gemini|astra|deepseek|qwen/i;
     const novelty = versionRegex.test(content) ? 85 : 70;
 
     // 6. SOURCE QUALITY (0-100)
     let sourceQuality = 60;
-    const srcName = topic.source.name.toLowerCase();
-    if (srcName.includes('techcrunch')) {
-      sourceQuality = 90;
-    } else if (srcName.includes('hacker news')) {
+    const srcName = (topic.source.name || '').toLowerCase();
+    const srcUrl = (topic.source.url || '').toLowerCase();
+
+    if (
+      srcName.includes('techcrunch') ||
+      srcName.includes('arxiv') ||
+      srcName.includes('openai') ||
+      srcName.includes('anthropic') ||
+      srcName.includes('deepmind') ||
+      srcUrl.includes('techcrunch.com') ||
+      srcUrl.includes('arxiv.org')
+    ) {
+      sourceQuality = 92;
+    } else if (
+      srcName.includes('hacker news') ||
+      srcName.includes('github') ||
+      srcName.includes('hugging') ||
+      srcUrl.includes('ycombinator.com') ||
+      srcUrl.includes('github.com')
+    ) {
       sourceQuality = 85;
+    } else if (srcName.includes('spam') || srcName.includes('farm') || srcUrl.includes('contentfarm')) {
+      sourceQuality = 20;
     }
 
     // Calculate overall weighted score
@@ -172,15 +205,13 @@ export class EditorialService {
     // Call memory check using dynamic require to prevent dependency cycles
     let historyMatch = { isKnown: false } as any;
     try {
-      const { memoryService } = require('../controllers/memory.controller');
       historyMatch = await memoryService.checkTopicHistory(
         agent.agentId,
         topic.id,
         topic.title,
         topic.source.url
       );
-      
-      const { globalActivityService } = require('./activity.service');
+
       await globalActivityService.recordEvent(
         agent.agentId,
         'MEMORY_CHECKED',
@@ -193,16 +224,21 @@ export class EditorialService {
       console.error('[Editorial] Memory check error:', err.message);
     }
 
+    // Apply repetition penalty if memory check flags exact/near-duplicate coverage
     if (historyMatch.isKnown) {
-      overall = Math.max(0, overall - 20); // apply -20 repetition penalty
+      overall = Math.max(0, overall - 30);
     }
 
-    const decision = overall >= this.DECISION_THRESHOLD ? 'ACCEPT' : 'REJECT';
+    // Quality gate threshold validation
+    const isEligible = overall >= this.DECISION_THRESHOLD && relevance >= 35 && timeliness >= 20;
+    const decision = isEligible ? 'ACCEPT' : 'REJECT';
 
-    // Formulate justification reason influenced by persona domain and editorial principles
-    let reason = `The topic overall score did not meet the required threshold of ${this.DECISION_THRESHOLD}, primarily due to low relevance (score: ${relevance}) to the persona's domain of "${agent.persona.domain}".`;
+    // Formulate justification reason
+    let reason = '';
     if (decision === 'ACCEPT') {
-      reason = `Highly relevant (score: ${relevance}) to the persona's "${agent.persona.domain}" focus and represents a significant current development.`;
+      reason = `Highly relevant (score: ${relevance}) to the persona's "${agent.persona.domain}" focus and represents a significant current development. Accepted with overall score ${overall}/100, timeliness (${timeliness}/100), and source quality (${sourceQuality}/100).`;
+    } else {
+      reason = `The topic overall score did not meet the required threshold of ${this.DECISION_THRESHOLD}, primarily due to low relevance (score: ${relevance}) to the persona's domain of "${agent.persona.domain}". Rejected with overall score ${overall}/100.`;
     }
 
     // Apply editorial principles warnings/notes dynamically
@@ -244,9 +280,8 @@ export class EditorialService {
       reason += principlesNote;
     }
 
-    // Append penalty comment if repetitive
     if (historyMatch.isKnown) {
-      reason += ` (Note: This topic is repetitive with previously encountered coverage matching "${historyMatch.matchType}", resulting in a score penalty).`;
+      reason += ` (Repetitive topic matching "${historyMatch.matchType}", -30 score penalty applied).`;
     }
 
     const randomHex = crypto.randomBytes(4).toString('hex');
@@ -278,10 +313,8 @@ export class EditorialService {
 
     // Auto-log to memory service and activity service
     try {
-      const { memoryService } = require('../controllers/memory.controller');
       await memoryService.recordEditorialDecision(agent.agentId, topic, savedDecision);
 
-      const { globalActivityService } = require('./activity.service');
       await globalActivityService.recordEvent(
         agent.agentId,
         'TOPIC_EVALUATED',

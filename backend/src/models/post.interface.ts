@@ -12,4 +12,17 @@ export interface Post {
   regenerationsCount: number;
   createdAt: string; // ISO 8601 UTC
   publishedAt?: string; // ISO 8601 UTC
+  content?: {
+    blog: {
+      title: string;
+      text: string;
+    };
+    linkedin: {
+      text: string;
+    };
+    x: {
+      text: string;
+    };
+  };
+  selectedFormat?: 'blog' | 'linkedin' | 'x';
 }

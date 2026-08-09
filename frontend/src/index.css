@@ -1,1 +1,89 @@
 @import "tailwindcss";
+
+:root {
+  --bg-paper: #FAF8F5;
+  --bg-surface: #FFFFFF;
+  --bg-card: #FAF8F5;
+  --bg-subtle: #F2EFE9;
+  --text-main: #111111;
+  --text-muted: #666666;
+  --text-dim: #888888;
+  --border-light: #E5E2DA;
+  --border-dark: #111111;
+  --accent-purple: #6D28D9;
+  --accent-purple-light: #F3E8FF;
+  --accent-purple-border: #C084FC;
+  --status-running: #10B981;
+  --status-degraded: #F59E0B;
+  --status-stopped: #9CA3AF;
+}
+
+html {
+  font-size: 100%;
+}
+
+body {
+  background-color: #FAF8F5;
+  background-image: radial-gradient(#E2DFD5 0.8px, transparent 0.8px);
+  background-size: 18px 18px;
+  color: #111111;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Editorial Typography Classes */
+.font-serif-headline {
+  font-family: 'Newsreader', Georgia, 'Times New Roman', serif;
+}
+
+.font-mono-tech {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+}
+
+.font-sans-ui {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Dark Editorial Section Headers */
+.section-header-banner {
+  background-color: #111111;
+  color: #FFFFFF;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
+}
+
+/* Custom Editorial Scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #D5D2C8 #FAF8F5;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #FAF8F5;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #D5D2C8;
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6D28D9;
+}
+

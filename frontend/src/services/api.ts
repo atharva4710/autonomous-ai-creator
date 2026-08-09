@@ -32,6 +32,12 @@ export interface InitAgentResponse {
 export interface PersonaData {
   name: string;
   domain: string;
+  role?: string;
+  description?: string;
+  interests?: string[];
+  expertise?: string[];
+  tone?: string[];
+  editorialPrinciples?: string[];
 }
 
 /**
@@ -325,9 +331,22 @@ export interface PostItem {
   agentId: string;
   topicId: string;
   decisionId: string;
-  status: 'DRAFT';
+  status: 'DRAFT' | 'VALIDATED' | 'PUBLISHED' | 'FAILED';
   text: string;
   createdAt: string;
+  content?: {
+    blog: {
+      title: string;
+      text: string;
+    };
+    linkedin: {
+      text: string;
+    };
+    x: {
+      text: string;
+    };
+  };
+  selectedFormat?: 'blog' | 'linkedin' | 'x';
 }
 
 export interface PostResponse {
@@ -385,6 +404,56 @@ export async function regenerateContent(agentId: string, topicId: string): Promi
 }
 
 /**
+ * Request format selection for content draft.
+ */
+export async function selectFormat(
+  agentId: string,
+  topicId: string,
+  format: 'blog' | 'linkedin' | 'x'
+): Promise<PostResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/content/select-format`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({ agentId, topicId, format }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to select format: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
+ * Request post publishing for a draft.
+ */
+export async function publishPostApi(agentId: string, topicId: string): Promise<PostResponse> {
+  const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+  const response = await fetch(`${baseUrlClean}/api/agent/publish`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({ agentId, topicId }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error?.message || `Failed to publish post: status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
  * Fetch all generated posts.
  */
 export async function getGeneratedContent(agentId: string): Promise<PostsResponse> {
@@ -432,6 +501,19 @@ export interface PublishedPost {
   text: string;
   rationale: string;
   sources: string[];
+  content?: {
+    blog: {
+      title: string;
+      text: string;
+    };
+    linkedin: {
+      text: string;
+    };
+    x: {
+      text: string;
+    };
+  };
+  selectedFormat?: 'blog' | 'linkedin' | 'x';
 }
 
 export interface FeedResponse {
@@ -440,10 +522,21 @@ export interface FeedResponse {
 
 export interface AgentStatusInfo {
   id: string;
-  status: 'RUNNING' | 'INITIALIZED' | 'PAUSED' | 'STOPPED' | 'ERROR';
-  lastCycleAt: string;
-  lastPublishedAt: string;
-  nextCycleAt: string;
+  status: 'RUNNING' | 'INITIALIZED' | 'PAUSED' | 'STOPPED' | 'ERROR' | 'DEGRADED' | 'IDLE';
+  persona?: AgentPersona;
+  createdAt?: string;
+  lastCycleAt?: string | null;
+  lastPublishedAt?: string | null;
+  nextCycleAt?: string | null;
+  nextPublishAt?: string | null;
+  intervalMinutes?: number;
+  currentStage?: string;
+  lastActivityType?: string | null;
+  latestPublishedPost?: {
+    id: string;
+    title: string;
+    publishedAt: string;
+  } | null;
 }
 
 export interface AgentStatusResponse {
@@ -522,10 +615,21 @@ export interface LatestActivityResponse {
   latest: ActivityEvent | null;
 }
 
+export interface PostExplanationDecision {
+  id?: string;
+  topicId?: string;
+  decision?: 'ACCEPT' | 'REJECT';
+  scores?: DecisionScores;
+  reason?: string;
+  evaluatedAt?: string;
+  selectionRank?: number;
+  comparativeAlternatives?: any[];
+}
+
 export interface PostExplanation {
   post: PublishedPost;
   topic: DiscoveredTopic;
-  decision: any;
+  decision: PostExplanationDecision | null;
   memory: {
     isKnown: boolean;
     matchType?: string;

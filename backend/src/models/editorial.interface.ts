@@ -1,3 +1,10 @@
+export interface ComparativeAlternative {
+  topicId: string;
+  title: string;
+  score: number;
+  rejectionReason: string;
+}
+
 export interface EditorialDecision {
   id: string;
   agentId: string;
@@ -18,4 +25,6 @@ export interface EditorialDecision {
     isKnown: boolean;
     matchType?: string;
   };
+  selectionRank?: number;
+  comparativeAlternatives?: ComparativeAlternative[];
 }

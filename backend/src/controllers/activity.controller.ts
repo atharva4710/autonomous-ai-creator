@@ -48,14 +48,12 @@ export const getActivity = async (
     const events = await globalActivityService.getAgentActivity(trimmedAgentId, parsedLimit);
 
     res.status(200).json({
-      events: events.map((e) => ({
+      activity: events.map((e) => ({
         id: e.id,
+        agentId: e.agentId,
         type: e.type,
-        timestamp: e.timestamp,
-        message: e.message,
-        topicId: e.topicId,
-        postId: e.postId,
-        metadata: e.metadata,
+        details: e.message,
+        createdAt: e.timestamp,
       })),
     });
   } catch (error) {
@@ -146,7 +144,15 @@ export const getLatestActivity = async (
     const latest = await globalActivityService.getLatestActivity(trimmedAgentId);
 
     res.status(200).json({
-      event: latest,
+      latest: latest
+        ? {
+            id: latest.id,
+            agentId: latest.agentId,
+            type: latest.type,
+            details: latest.message,
+            createdAt: latest.timestamp,
+          }
+        : null,
     });
   } catch (error) {
     next(error);

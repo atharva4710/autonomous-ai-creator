@@ -29,13 +29,19 @@ export class MemoryService {
 
   /**
    * Helper to verify keyword overlap ratio between two titles.
-   * Checks if overlap matches >= 80% of the shorter word set.
+   * Filters out generic domain stopwords and requires >= 3 distinct content word matches.
    */
   private keywordOverlap(titleA: string, titleB: string): boolean {
-    const normA = normalizeText(titleA).split(' ').filter((w) => w.length > 0);
-    const normB = normalizeText(titleB).split(' ').filter((w) => w.length > 0);
+    const domainStopwords = new Set([
+      'ai', 'security', 'model', 'tech', 'technology', 'system', 'new', 'update',
+      'data', 'launch', 'release', 'research', 'report', 'announcement', 'first',
+      'world', 'global', 'tool', 'code', 'open', 'source'
+    ]);
 
-    if (normA.length === 0 || normB.length === 0) return false;
+    const normA = normalizeText(titleA).split(' ').filter((w) => w.length > 2 && !domainStopwords.has(w));
+    const normB = normalizeText(titleB).split(' ').filter((w) => w.length > 2 && !domainStopwords.has(w));
+
+    if (normA.length < 3 || normB.length < 3) return false;
 
     const setA = new Set(normA);
     let matches = 0;
@@ -47,7 +53,7 @@ export class MemoryService {
     }
 
     const minWords = Math.min(normA.length, normB.length);
-    return (matches / minWords) >= 0.8;
+    return matches >= 3 && (matches / minWords) >= 0.85;
   }
 
   /**
@@ -115,7 +121,7 @@ export class MemoryService {
   ): Promise<MatchResult> {
     // 1. Exact topic ID match check
     const exactMatch = await this.memoryRepository.findByTopicId(agentId, topicId);
-    if (exactMatch) {
+    if (exactMatch && exactMatch.type !== 'DISCOVERED_TOPIC') {
       return {
         isKnown: true,
         matchType: 'EXACT_TOPIC_ID',
@@ -129,6 +135,8 @@ export class MemoryService {
 
     // 2. Normalized title + source match check
     for (const m of memories) {
+      if (m.topicId === topicId) continue;
+      if (m.type === 'DISCOVERED_TOPIC') continue;
       const mNormTitle = normalizeText(m.title);
       if (mNormTitle === targetNormTitle && m.source === source) {
         return {
@@ -141,6 +149,8 @@ export class MemoryService {
 
     // 3. Normalized title match check
     for (const m of memories) {
+      if (m.topicId === topicId) continue;
+      if (m.type === 'DISCOVERED_TOPIC') continue;
       const mNormTitle = normalizeText(m.title);
       if (mNormTitle === targetNormTitle) {
         return {
@@ -151,8 +161,10 @@ export class MemoryService {
       }
     }
 
-    // 4. Keyword overlap match check (overlap >= 80%)
+    // 4. Keyword overlap match check (overlap >= 85%)
     for (const m of memories) {
+      if (m.topicId === topicId) continue;
+      if (m.type === 'DISCOVERED_TOPIC') continue;
       if (this.keywordOverlap(m.title, title)) {
         return {
           isKnown: true,

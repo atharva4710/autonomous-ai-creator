@@ -72,6 +72,7 @@ export const generateDraft = async (
       } else {
         res.status(400).json({
           error: {
+            code: err.code || 'CONTENT_GENERATION_ERROR',
             message: msg,
             status: 400,
           },
@@ -152,6 +153,7 @@ export const regenerateDraft = async (
       } else {
         res.status(400).json({
           error: {
+            code: err.code || 'CONTENT_GENERATION_ERROR',
             message: msg,
             status: 400,
           },
@@ -271,6 +273,135 @@ export const getSingleDraft = async (
     }
 
     res.status(200).json(post);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Handles POST /api/agent/content/select-format
+ */
+export const selectDraftFormat = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { agentId, topicId, format } = req.body;
+
+    if (!agentId || typeof agentId !== 'string' || !agentId.trim()) {
+      res.status(400).json({
+        error: {
+          message: 'agentId is required.',
+          status: 400,
+        },
+      });
+      return;
+    }
+
+    if (!topicId || typeof topicId !== 'string' || !topicId.trim()) {
+      res.status(400).json({
+        error: {
+          message: 'topicId is required.',
+          status: 400,
+        },
+      });
+      return;
+    }
+
+    if (!format || (format !== 'blog' && format !== 'linkedin' && format !== 'x')) {
+      res.status(400).json({
+        error: {
+          message: 'format must be "blog", "linkedin" or "x".',
+          status: 400,
+        },
+      });
+      return;
+    }
+
+    const trimmedAgentId = agentId.trim();
+    const trimmedTopicId = topicId.trim();
+
+    const post = await globalPostRepository.findByTopicId(trimmedAgentId, trimmedTopicId);
+    if (!post) {
+      res.status(404).json({
+        error: {
+          message: 'Draft post not found for this topic.',
+          status: 404,
+        },
+      });
+      return;
+    }
+
+    post.selectedFormat = format;
+    if (post.content) {
+      if (format === 'blog' && post.content.blog) {
+        post.text = post.content.blog.text;
+      } else if (format === 'linkedin' && post.content.linkedin) {
+        post.text = post.content.linkedin.text;
+      } else if (format === 'x' && post.content.x) {
+        post.text = post.content.x.text;
+      }
+    }
+
+    const saved = await globalPostRepository.save(post);
+
+    try {
+      const { globalActivityService } = require('../services/activity.service');
+      await globalActivityService.recordEvent(
+        trimmedAgentId,
+        'FORMAT_SELECTED',
+        `Selected publishing format "${format}" for post: "${post.id}".`,
+        trimmedTopicId,
+        saved.id
+      );
+    } catch (_) {}
+
+    res.status(200).json({
+      post: saved,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Handles POST /api/agent/publish
+ */
+export const publishDraftPost = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { agentId, topicId } = req.body;
+
+    if (!agentId || typeof agentId !== 'string' || !agentId.trim()) {
+      res.status(400).json({
+        error: {
+          message: 'agentId is required.',
+          status: 400,
+        },
+      });
+      return;
+    }
+
+    if (!topicId || typeof topicId !== 'string' || !topicId.trim()) {
+      res.status(400).json({
+        error: {
+          message: 'topicId is required.',
+          status: 400,
+        },
+      });
+      return;
+    }
+
+    const { globalPublishingService } = require('../services/publishing.service');
+    const published = await globalPublishingService.publishPost(agentId.trim(), topicId.trim());
+
+    res.status(200).json({
+      post: published,
+    });
   } catch (error) {
     next(error);
   }
