@@ -6,10 +6,17 @@ import { globalEditorialRepository } from '../repositories/editorial.repository'
 import { globalMemoryRepository } from '../repositories/memory.repository';
 import { globalAgentRepository } from '../repositories/agent.repository';
 import { globalActivityService } from './activity.service';
+import { ContentGenerationService, globalContentGenerationService } from './contentGeneration.service';
 import { PublishingError } from '../utils/errors';
 import { retry } from '../utils/retry';
 
 export class PublishingService {
+  private contentGenerationService: ContentGenerationService;
+
+  constructor(contentGenerationService?: ContentGenerationService) {
+    this.contentGenerationService = contentGenerationService || globalContentGenerationService;
+  }
+
   /**
    * Transition draft post to PUBLISHED, populating metadata.
    */
@@ -21,10 +28,10 @@ export class PublishingService {
         throw new Error('Topic not found');
       }
 
-      // 2. Retrieve existing draft post
-      const post = await globalPostRepository.findByTopicId(agentId, topicId);
+      // 2. Retrieve existing draft post (or generate on demand if missing)
+      let post = await globalPostRepository.findByTopicId(agentId, topicId);
       if (!post) {
-        throw new Error('Draft not found for this topic');
+        post = await this.contentGenerationService.generateContent(agentId, topicId);
       }
 
       // 3. Retrieve editorial decision and agent details for rationale
