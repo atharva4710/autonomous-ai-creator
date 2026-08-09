@@ -34,6 +34,28 @@ export function getDbPool(): Pool | null {
 }
 
 /**
+ * Robustly resolves the path to schema.sql in both development (src) and compiled production (dist) environments.
+ */
+export function resolveSchemaPath(): string {
+  const possiblePaths = [
+    path.join(__dirname, 'schema.sql'),
+    path.join(process.cwd(), 'src', 'db', 'schema.sql'),
+    path.join(process.cwd(), 'dist', 'db', 'schema.sql'),
+    path.join(process.cwd(), 'backend', 'src', 'db', 'schema.sql'),
+    path.join(process.cwd(), 'backend', 'dist', 'db', 'schema.sql'),
+    path.join(__dirname, '..', '..', 'src', 'db', 'schema.sql'),
+  ];
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+
+  throw new Error(`schema.sql file not found in any expected location: ${possiblePaths.join(', ')}`);
+}
+
+/**
  * Ensures PostgreSQL tables and indexes are created.
  */
 export async function initDbSchema(): Promise<boolean> {
@@ -47,11 +69,11 @@ export async function initDbSchema(): Promise<boolean> {
   }
 
   try {
-    const schemaPath = path.join(__dirname, 'schema.sql');
+    const schemaPath = resolveSchemaPath();
     const sql = fs.readFileSync(schemaPath, 'utf-8');
     await p.query(sql);
     isInitialized = true;
-    console.log('[Database] PostgreSQL schema initialized successfully.');
+    console.log(`[Database] PostgreSQL schema initialized successfully from ${schemaPath}.`);
     return true;
   } catch (err: any) {
     console.error('[Database] Failed to initialize PostgreSQL schema:', err.message);

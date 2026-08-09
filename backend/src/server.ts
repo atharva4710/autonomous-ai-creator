@@ -37,8 +37,9 @@ if (config.nodeEnv !== 'test') {
     process.exit(1);
   }
 
-  app.listen(config.port, async () => {
-    console.log(`[Server] Running in ${config.nodeEnv} mode on http://localhost:${config.port}`);
+  const host = process.env.HOST || '0.0.0.0';
+  app.listen(config.port, host, async () => {
+    console.log(`[Server] Running in ${config.nodeEnv} mode on http://${host}:${config.port}`);
     console.log(`[Server] AI Provider: ${config.aiProvider.toUpperCase()}`);
     if (config.aiProvider === 'groq') {
       console.log(`[Server] AI Model: ${config.groqModel}`);
